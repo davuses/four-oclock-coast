@@ -55,8 +55,17 @@
       </div>
     </header>
 
-    <!-- Main interactive player card (reused waveform + section pills + 6-track arrangement) -->
+    <!-- Main interactive player card (reused waveform + section pills + 6-track arrangement + A/B engine toggle) -->
     <section class="panel player-panel" aria-label="Audio player">
+      <div class="ab-bar">
+        <span class="ab-label">Sound Engine A/B</span>
+        <div class="ab-switch" role="group" aria-label="Compare sound engines">
+          <button id="engineStudioBtn" type="button" class="ab-btn active">A · OpenBand Studio</button>
+          <button id="engineSynthBtn" type="button" class="ab-btn">B · Web Audio Synth</button>
+        </div>
+        <span id="engineInfo" class="mono-readout">Native OpenBand · -3.53 dBFS</span>
+      </div>
+
       <div class="transport-row">
         <div class="transport-left">
           <button id="prevBtn" type="button" class="icon-btn" title="Previous track (P)">
@@ -112,7 +121,7 @@
     <section class="panel tracklist-panel" aria-label="Album tracklist">
       <div class="section-head">
         <h2>Tracklist</h2>
-        <span class="hint">Space: Play/Pause · ←/→: Seek 5s · N/P: Next/Prev</span>
+        <span class="hint">Space: Play/Pause · E: Switch A/B Engine · ←/→: Seek 5s · N/P: Next/Prev</span>
       </div>
       <ol id="trackList" class="tracklist"></ol>
     </section>

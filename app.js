@@ -12,6 +12,10 @@
   const timeBadge = document.getElementById('timeBadge');
   const trackBlurb = document.getElementById('trackBlurb');
 
+  const engineStudioBtn = document.getElementById('engineStudioBtn');
+  const engineSynthBtn = document.getElementById('engineSynthBtn');
+  const engineInfo = document.getElementById('engineInfo');
+
   const prevBtn = document.getElementById('prevBtn');
   const playBtn = document.getElementById('playBtn');
   const nextBtn = document.getElementById('nextBtn');
@@ -33,25 +37,28 @@
   const res = await fetch('album-data.json');
   const ALBUM = await res.json();
 
-  let activeIdx = 1; // Default to Track 2: Sea Breeze at Four
-  const hashMatch = /^#track=(\d+)$/.exec(window.location.hash);
-  if (hashMatch) {
-    const n = Number(hashMatch[1]) - 1;
+  let activeIdx = 1; // Default: Track 2 (Sea Breeze at Four)
+  let activeEngine = 'studio'; // 'studio' | 'synth'
+
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (params.has('track')) {
+    const n = Number(params.get('track')) - 1;
     if (n >= 0 && n < ALBUM.length) activeIdx = n;
   }
+  if (params.get('engine') === 'synth') activeEngine = 'synth';
 
   let hoverFrac = null;
   let pillButtons = [];
   let rowEls = [];
   let lanePlayhead = null;
-  let rafId = null;
 
   audio.volume = Number(volSlider.value);
 
   function cur() { return ALBUM[activeIdx]; }
+  function curEng(s = cur()) { return s.engines[activeEngine]; }
   function secPerBar(s = cur()) { return (4 / s.bpm) * 60; }
   function totalDur(s = cur()) {
-    return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : s.duration;
+    return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : curEng(s).duration;
   }
 
   function fmtTime(sec) {
@@ -72,6 +79,10 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   }
 
+  function updateHash() {
+    history.replaceState(null, '', `#track=${activeIdx + 1}&engine=${activeEngine}`);
+  }
+
   // Build tracklist
   rowEls = ALBUM.map((s, idx) => {
     const li = document.createElement('li');
@@ -83,7 +94,7 @@
         <div class="track-sub">${s.subtitle}</div>
       </div>
       <span class="track-meta">${s.bpm} BPM · ${s.key} · ${fmtTime(s.duration)}</span>
-      <a class="track-dl" href="${s.audio}" download="${s.downloadName}" title="Download ${s.title} MP3" aria-label="Download ${s.title} MP3">
+      <a class="track-dl" href="${s.engines.studio.audio}" download="${s.engines.studio.downloadName}" title="Download MP3" aria-label="Download ${s.title} MP3">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
           <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -92,21 +103,28 @@
     `;
     li.querySelector('.track-dl').addEventListener('click', (e) => e.stopPropagation());
     li.addEventListener('click', () => {
-      if (idx === activeIdx) {
-        togglePlay();
-      } else {
-        selectTrack(idx, true);
-      }
+      if (idx === activeIdx) togglePlay();
+      else selectTrack(idx, true);
     });
     trackListEl.appendChild(li);
     return li;
   });
 
+  function syncTracklistDownloadLinks() {
+    ALBUM.forEach((s, i) => {
+      const eng = s.engines[activeEngine];
+      const a = rowEls[i].querySelector('.track-dl');
+      a.href = eng.audio;
+      a.download = eng.downloadName;
+      a.title = `Download ${s.title} (${eng.label}) MP3`;
+    });
+  }
+
   function updateMediaSession() {
     if (!('mediaSession' in navigator)) return;
     const s = cur();
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: s.title,
+      title: `${s.title} (${curEng(s).label})`,
       artist: 'OpenBand',
       album: "Four O'Clock Coast",
       artwork: [{ src: 'cover.jpg', sizes: '512x512', type: 'image/jpeg' }],
@@ -115,26 +133,58 @@
     navigator.mediaSession.setActionHandler('nexttrack', () => selectTrack((activeIdx + 1) % ALBUM.length, true));
   }
 
+  function syncEngineUI() {
+    const s = cur();
+    const eng = curEng(s);
+    engineStudioBtn.classList.toggle('active', activeEngine === 'studio');
+    engineSynthBtn.classList.toggle('active', activeEngine === 'synth');
+    engineInfo.textContent = `${eng.label} · Peak ${eng.peakDb} dBFS`;
+    downloadCurrentBtn.href = eng.audio;
+    downloadCurrentBtn.download = eng.downloadName;
+    downloadCurrentBtn.querySelector('span').textContent = `Download MP3 (${activeEngine === 'studio' ? 'Studio' : 'Synth'})`;
+    syncTracklistDownloadLinks();
+    updateHash();
+    updateMediaSession();
+  }
+
+  function switchEngine(nextEng) {
+    if (nextEng === activeEngine) return;
+    const wasPlaying = !audio.paused && !audio.ended;
+    const savedTime = audio.currentTime || 0;
+    activeEngine = nextEng;
+    const eng = curEng();
+    syncEngineUI();
+
+    audio.src = eng.audio;
+    audio.load();
+    const resumeAt = () => {
+      audio.removeEventListener('loadedmetadata', resumeAt);
+      const clamped = Math.min(Math.max(0, savedTime), Math.max(0, (audio.duration || eng.duration) - 0.1));
+      audio.currentTime = clamped;
+      render();
+      if (wasPlaying) audio.play().catch(() => {});
+    };
+    audio.addEventListener('loadedmetadata', resumeAt);
+    render();
+  }
+
   function selectTrack(idx, autoplay = false) {
     activeIdx = idx;
     const s = cur();
+    const eng = curEng(s);
     document.documentElement.setAttribute('data-theme', s.theme);
-    history.replaceState(null, '', `#track=${idx + 1}`);
 
-    audio.src = s.audio;
+    audio.src = eng.audio;
     audio.load();
 
     songTitle.textContent = `${idx + 1}. ${s.title}`;
     songMeta.textContent = `${s.bpm} BPM · Key ${s.key} · ${s.bars} bars`;
     timeBadge.textContent = s.subtitle.split(' · ')[0] || s.subtitle;
     trackBlurb.textContent = s.blurb;
-    downloadCurrentBtn.href = s.audio;
-    downloadCurrentBtn.download = s.downloadName;
     arrLabel.textContent = `Arrangement · 6 instruments · ${s.bars} bars`;
 
     rowEls.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
 
-    // Section pills
     pillsEl.innerHTML = '';
     pillButtons = s.sections.map((sec) => {
       const btn = document.createElement('button');
@@ -151,7 +201,6 @@
       return { section: sec, btn };
     });
 
-    // Arrangement lanes
     lanesEl.innerHTML = '';
     lanePlayhead = document.createElement('div');
     lanePlayhead.className = 'lane-playhead';
@@ -186,16 +235,15 @@
     });
     lanesEl.appendChild(lanePlayhead);
 
-    updateMediaSession();
+    syncEngineUI();
     syncPlayUI();
     render();
-    if (autoplay) {
-      audio.play().catch(() => {});
-    }
+    if (autoplay) audio.play().catch(() => {});
   }
 
   function drawWaveform() {
     const s = cur();
+    const eng = curEng(s);
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     const w = Math.max(1, Math.round(rect.width));
@@ -221,7 +269,7 @@
       c.beginPath(); c.moveTo(x, 4); c.lineTo(x, h - 4); c.stroke();
     });
 
-    const peaks = s.peaks;
+    const peaks = eng.peaks;
     const step = w / peaks.length;
     const barW = Math.max(2, step * 0.65);
     const midY = h / 2;
@@ -295,11 +343,11 @@
 
   function tick() {
     render();
-    if (!audio.paused && !audio.ended) {
-      rafId = requestAnimationFrame(tick);
-    }
+    if (!audio.paused && !audio.ended) requestAnimationFrame(tick);
   }
 
+  engineStudioBtn.addEventListener('click', () => switchEngine('studio'));
+  engineSynthBtn.addEventListener('click', () => switchEngine('synth'));
   playBtn.addEventListener('click', togglePlay);
   heroPlayBtn.addEventListener('click', togglePlay);
   prevBtn.addEventListener('click', () => selectTrack((activeIdx - 1 + ALBUM.length) % ALBUM.length, !audio.paused));
@@ -325,11 +373,7 @@
   }
 
   let dragging = false;
-  canvas.addEventListener('pointerdown', (ev) => {
-    dragging = true;
-    canvas.setPointerCapture(ev.pointerId);
-    seekFromEvent(ev);
-  });
+  canvas.addEventListener('pointerdown', (ev) => { dragging = true; canvas.setPointerCapture(ev.pointerId); seekFromEvent(ev); });
   canvas.addEventListener('pointermove', (ev) => {
     const rect = canvas.getBoundingClientRect();
     hoverFrac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
@@ -340,28 +384,20 @@
     else drawWaveform();
   });
   canvas.addEventListener('pointerup', () => { dragging = false; });
-  canvas.addEventListener('pointerleave', () => {
-    dragging = false;
-    hoverFrac = null;
-    hoverTime.classList.add('hidden');
-    drawWaveform();
-  });
+  canvas.addEventListener('pointerleave', () => { dragging = false; hoverFrac = null; hoverTime.classList.add('hidden'); drawWaveform(); });
 
   audio.addEventListener('play', () => { syncPlayUI(); tick(); });
   audio.addEventListener('pause', () => { syncPlayUI(); render(); });
   audio.addEventListener('loadedmetadata', render);
   audio.addEventListener('ended', () => {
-    if (activeIdx + 1 < ALBUM.length) {
-      selectTrack(activeIdx + 1, true);
-    } else {
-      syncPlayUI();
-      render();
-    }
+    if (activeIdx + 1 < ALBUM.length) selectTrack(activeIdx + 1, true);
+    else { syncPlayUI(); render(); }
   });
 
   window.addEventListener('keydown', (e) => {
     if (e.target && ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'e' || e.key === 'E') switchEngine(activeEngine === 'studio' ? 'synth' : 'studio');
     else if (e.code === 'ArrowRight') { audio.currentTime = Math.min(totalDur(), (audio.currentTime || 0) + 5); render(); }
     else if (e.code === 'ArrowLeft') { audio.currentTime = Math.max(0, (audio.currentTime || 0) - 5); render(); }
     else if (e.key === 'n' || e.key === 'N') selectTrack((activeIdx + 1) % ALBUM.length, !audio.paused);
