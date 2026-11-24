@@ -78,6 +78,13 @@
           <button id="nextBtn" type="button" class="icon-btn" title="Next track (N)">
             <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
           </button>
+          <button id="loopBtn" type="button" class="loop-btn" title="Loop mode: Off / Album / Song (L)" aria-label="Loop mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+              <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+              <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            </svg>
+            <span id="loopLabel">Loop: Off</span>
+          </button>
           <div class="now-playing">
             <div class="now-title-row">
               <span id="songTitle" class="now-title">2. Sea Breeze at Four</span>
@@ -121,7 +128,7 @@
     <section class="panel tracklist-panel" aria-label="Album tracklist">
       <div class="section-head">
         <h2>Tracklist</h2>
-        <span class="hint">Space: Play/Pause · E: Switch A/B Engine · ←/→: Seek 5s · N/P: Next/Prev</span>
+        <span class="hint">Space: Play/Pause · E: A/B Engine · L: Loop Mode · ←/→: Seek 5s · N/P: Next/Prev</span>
       </div>
       <ol id="trackList" class="tracklist"></ol>
     </section>

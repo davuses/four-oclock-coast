@@ -19,6 +19,8 @@
   const prevBtn = document.getElementById('prevBtn');
   const playBtn = document.getElementById('playBtn');
   const nextBtn = document.getElementById('nextBtn');
+  const loopBtn = document.getElementById('loopBtn');
+  const loopLabel = document.getElementById('loopLabel');
   const iconPlay = document.getElementById('iconPlay');
   const iconPause = document.getElementById('iconPause');
   const songTitle = document.getElementById('songTitle');
@@ -39,6 +41,13 @@
 
   let activeIdx = 1; // Default: Track 2 (Sea Breeze at Four)
   let activeEngine = 'studio'; // 'studio' | 'synth'
+  const LOOP_MODES = ['off', 'album', 'song'];
+  const LOOP_LABELS = { off: 'Loop: Off', album: 'Loop: Album', song: 'Loop: Song' };
+  let loopMode = 'off';
+  try {
+    const savedLoop = localStorage.getItem('foc_loop_mode');
+    if (LOOP_MODES.includes(savedLoop)) loopMode = savedLoop;
+  } catch (_) {}
 
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   if (params.has('track')) {
@@ -346,12 +355,27 @@
     if (!audio.paused && !audio.ended) requestAnimationFrame(tick);
   }
 
+  function syncLoopUI() {
+    audio.loop = loopMode === 'song';
+    loopLabel.textContent = LOOP_LABELS[loopMode];
+    loopBtn.classList.toggle('active', loopMode !== 'off');
+    loopBtn.setAttribute('aria-pressed', loopMode !== 'off' ? 'true' : 'false');
+    try { localStorage.setItem('foc_loop_mode', loopMode); } catch (_) {}
+  }
+
+  function cycleLoopMode() {
+    const nextIdx = (LOOP_MODES.indexOf(loopMode) + 1) % LOOP_MODES.length;
+    loopMode = LOOP_MODES[nextIdx];
+    syncLoopUI();
+  }
+
   engineStudioBtn.addEventListener('click', () => switchEngine('studio'));
   engineSynthBtn.addEventListener('click', () => switchEngine('synth'));
   playBtn.addEventListener('click', togglePlay);
   heroPlayBtn.addEventListener('click', togglePlay);
   prevBtn.addEventListener('click', () => selectTrack((activeIdx - 1 + ALBUM.length) % ALBUM.length, !audio.paused));
   nextBtn.addEventListener('click', () => selectTrack((activeIdx + 1) % ALBUM.length, !audio.paused));
+  loopBtn.addEventListener('click', cycleLoopMode);
   volSlider.addEventListener('input', () => { audio.volume = Number(volSlider.value); });
 
   shareBtn.addEventListener('click', async () => {
@@ -390,14 +414,24 @@
   audio.addEventListener('pause', () => { syncPlayUI(); render(); });
   audio.addEventListener('loadedmetadata', render);
   audio.addEventListener('ended', () => {
-    if (activeIdx + 1 < ALBUM.length) selectTrack(activeIdx + 1, true);
-    else { syncPlayUI(); render(); }
+    if (loopMode === 'song') {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } else if (activeIdx + 1 < ALBUM.length) {
+      selectTrack(activeIdx + 1, true);
+    } else if (loopMode === 'album') {
+      selectTrack(0, true);
+    } else {
+      syncPlayUI();
+      render();
+    }
   });
 
   window.addEventListener('keydown', (e) => {
     if (e.target && ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     else if (e.key === 'e' || e.key === 'E') switchEngine(activeEngine === 'studio' ? 'synth' : 'studio');
+    else if (e.key === 'l' || e.key === 'L') cycleLoopMode();
     else if (e.code === 'ArrowRight') { audio.currentTime = Math.min(totalDur(), (audio.currentTime || 0) + 5); render(); }
     else if (e.code === 'ArrowLeft') { audio.currentTime = Math.max(0, (audio.currentTime || 0) - 5); render(); }
     else if (e.key === 'n' || e.key === 'N') selectTrack((activeIdx + 1) % ALBUM.length, !audio.paused);
@@ -405,5 +439,6 @@
   });
 
   window.addEventListener('resize', render);
+  syncLoopUI();
   selectTrack(activeIdx, false);
 })();

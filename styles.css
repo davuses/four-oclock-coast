@@ -324,6 +324,32 @@ body {
 
 .icon-btn:hover { color: var(--text); border-color: var(--accent); }
 
+.loop-btn {
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.loop-btn:hover { color: var(--text); border-color: var(--accent); }
+
+.loop-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .play-circle {
   width: 44px;
   height: 44px;
